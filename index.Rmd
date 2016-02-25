@@ -1,25 +1,49 @@
 ---
-title: "Random Forest to predict quality of excercise"
+title: "Quality activity recognition"
 author: "Javier Saenz"
 date: "23. Februar 2016"
-output: html_document
+output: 
+  html_document: 
+    keep_md: yes
 ---
 
 ## Executive summary
 One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.  
-In this project, we have seen that **using the data from accelerometers** on the belt, forearm, arm, and dumbell we could **predict with Random Forest** method the manner in which 6 participants did an exercise with **99.3% accurancy**.
+In this project, we have seen that **using the data from accelerometers** on the belt, forearm, arm, and dumbell we could **predict with Random Forest** method the quality in which 6 participants did an exercise with **99.3% accurancy**.
 
 ## Data processing
+
+### Download data
+```{r, message=FALSE, warning=FALSE}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "./Data/pml-training.csv"
+testFile  <- "./Data/pml-testing.csv"
+if (!file.exists("./Data")) {
+  dir.create("./Data")
+}
+if (!file.exists(trainFile)) {
+  download.file(trainUrl, destfile=trainFile)
+}
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile)
+}
+```
+
 ### Load data
-```{r, message=FALSE, warning=FALSE, cache=TRUE}
+```{r, message=FALSE, warning=FALSE}
 suppressWarnings(library(caret))
 training <- read.csv("Data/pml-training.csv", header=T) #load training data
 test <- read.csv("Data/pml-testing.csv", header=T) #load test data
 ```
+Our data has the following dimensions:  
+- Training data set: `r dim(training)[1]` Observations & `r dim(training)[2]` Variables    
+- Test data set: `r dim(test)[1]` Observations & `r dim(test)[2]` Variables  
+
 ### Cleaning data
-```{r, message=FALSE, warning=FALSE, cache=TRUE}
-training <- subset(training, select=-c(1:6)) #remove row numbers, time stamp and user names
-test <- subset(test, select=-c(1:6)) #remove row numbers, time stamp and user names
+```{r, message=FALSE, warning=FALSE}
+training <- subset(training, select=-c(1:7)) #remove row numbers, time stamp and user names
+test <- subset(test, select=-c(1:7)) #remove row numbers, time stamp and user names
 classe <- training$classe #save classe information
 training <- training[ , colSums(is.na(training)) == 0] #Remove all columns containing at least one NA
 test <- test[ , colSums(is.na(test)) == 0] #Remove all columns containing at least one NA
@@ -27,17 +51,20 @@ training <- training[,sapply(training,is.numeric)] # remove non-numeric variable
 test <- test[,sapply(test,is.numeric)] # remove non-numeric variables
 training$classe <- classe; rm(classe) #add classe information and delete variable
 ```
+After the preparation we have the following dimensions:  
+- Training data set: `r dim(training)[1]` Observations & `r dim(training)[2]` Variables    
+- Test data set: `r dim(test)[1]` Observations & `r dim(test)[2]` Variables  
 
 ### Prepare training, validate and test data
-Training data set:
--  It includes the parameter to estimate: **classe**
+Training data set:  
+-  It includes the parameter to estimate: **classe**  
 -  We will split the training set on two subsets (50% observations each), train and validate  
 -  Train to build the model and validate to validate it  
 
-Test data set:
--  Includes 20 observations, without the parameter **classe** but with **problem_id**
+Test data set:  
+-  Includes 20 observations, without the parameter **classe** but with **problem_id**  
 
-```{r, message=FALSE, warning=FALSE, cache=TRUE}
+```{r, message=FALSE, warning=FALSE}
 set.seed(33433)
 inTraining <- createDataPartition(training$classe, p=0.5, list=FALSE)
 train <- training[ inTraining,]
@@ -50,9 +77,11 @@ We will follow the recommendation of the study and use a Random Forest method to
 Fore the model accurancy we will be using a **10 fold cross validation** and each forest with 10 trees. 
 If accuracy is low then we will try a second model.
 
-```{r, message=FALSE, warning=FALSE, cache=TRUE}
+```{r, message=FALSE, warning=FALSE}
 set.seed(33433)
-tr <- trainControl(method = "cv", number = 10) #setting parameters for the model
+tr <- trainControl(method = "cv", #setting parameters for the model, method Cross Validation
+                   number = 10) #number of folds
+                                               
 fit.rf <- train(classe~.,                      #fit model
               method = "rf", #random forest model
               data = train, 
@@ -63,22 +92,27 @@ fit.rf <- train(classe~.,                      #fit model
 
 print(fit.rf$finalModel)
 ```
+
+### Random forest model plot
+```{r, message=FALSE, warning=FALSE}
+plot(fit.rf, log = "y", lwd = 2, main = "Random forest accuracy", xlab = "Predictors", 
+    ylab = "Accuracy")
+```
+
 ## Estimating model accuracy
 We evaluate the model with the validation data
-
 ```{r, message=FALSE, warning=FALSE}
 set.seed(33433)
 pred.rf <- predict(fit.rf, newdata = validate) #Predict with validation data
 confusionMatrix(pred.rf, validate$classe)$overall[1] #Measure accuracy with validation data
 ```
-We get 99.3% accuracy!!  
-There is no need to improve the model
-
+We achive a out-of-sample error is `r 1-round(confusionMatrix(pred.rf, validate$classe)$overall[1], 4)` and a `r 100*round(confusionMatrix(pred.rf, validate$classe)$overall[1], 4)`% Accuracy using cross validation.    
+There is no need to improve the model or try other models like naive bayes or decision trees
 
 ## Most relevant variables
-Here we plot the variables that have a higher impact on the fitted model
+Here we estimate the variables with a higher importance
 ```{r, message=FALSE, warning=FALSE}
-VarImportance <- varImp(fit.rf)
+VarImportance <- varImp(fit.rf, scale=FALSE)
 plot(VarImportance, main = "Most relevant variables", top = 10)
 ```
 
@@ -93,5 +127,3 @@ t(data.frame(problem_id = test$problem_id, prediction = pred.rf.test))
 ## Data source
 - Website: http://groupware.les.inf.puc-rio.br/har  
 - Paper: http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf  
-- The training data: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv  
-- The test data: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv  
